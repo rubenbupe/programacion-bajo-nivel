@@ -1,6 +1,6 @@
 #pragma once
 
-#define NUM_CPUS 1  // TODO: ola que ase ponme a 8
+#define NUM_CPUS 8
 
 typedef struct frgbaColor_t{
 

@@ -14,12 +14,11 @@ float convolucionSSE(float* data, float* kernel){
     float res=0.0f;
     vres = new float[3];
 
-    std::cout << "wachi1 " << '\n';
     asm volatile (
-        "mov %[pv1], %%rax\n"
-        "mov %[pv2], %%rbx\n"
-        "mov %[vres], %%rdx\n"
-        "mov $3, %%rcx\n"
+    "mov %[pv1], %%rax\n"
+    "mov %[pv2], %%rbx\n"
+    "mov %[vres], %%rdx\n"
+    "mov $3, %%rcx\n"
     "loop:\n"
         "movaps (%%rax), %%xmm0\n"
         "movaps (%%rbx), %%xmm1\n"
@@ -38,20 +37,28 @@ float convolucionSSE(float* data, float* kernel){
         : [pv1] "m" (data), [pv2] "m" (kernel), [vres] "m" (vres)
 
     );
-    std::cout << "wachi2 " << vres[0] + vres[1] + vres[2] << '\n';
+
+
 
     
     return vres[0] + vres[1] + vres[2];
 
 }
 
-void aplicaFiltroBilinearThread(float* data, int numChannels, int w, int h, int ini, int end, float* &dataOut){
+void aplicaFiltroBilinearThreadSSE(float* data, int numChannels, int w, int h, int ini, int end, float* &dataOut){
 
     mmx_vector bilFilter = { .data{     1.0f/9.0f, 1.0f/9.0f, 1.0f/9.0f, 
                                         1.0f/9.0f, 1.0f/9.0f, 1.0f/9.0f, 
                                         1.0f/9.0f, 1.0f/9.0f, 1.0f/9.0f,
                                         0.0f     , 0.0f,      0.0f       }};
     
+    float *kernel = new (std::align_val_t(16))float[12];
+    float *r = new (std::align_val_t(16))float[12];
+    float *g = new (std::align_val_t(16))float[12];
+    float *b = new (std::align_val_t(16))float[12];
+    float *a = new (std::align_val_t(16))float[12];
+    memcpy(kernel, & bilFilter, sizeof(float) * 12);
+
     if (numChannels == 3){
             frgbColor_t *pixels = (frgbColor_t*)data;
             frgbColor_t *pixelsOut = new frgbColor_t[w * (end - ini)];
@@ -61,24 +68,6 @@ void aplicaFiltroBilinearThread(float* data, int numChannels, int w, int h, int 
                 frgbColor_t pixelAux;
                 //pixelAux.r = pixelAux.g = pixelAux.b = 0;
 
-                std::cout << "ola1" << '\n';
-
-                mmx_vector vr;
-                mmx_vector vg;
-                mmx_vector vb;
-
-
-                float *r = new (std::align_val_t(16))float[12];
-                float *g = new (std::align_val_t(16))float[12];
-                float *b = new (std::align_val_t(16))float[12];
-                float *kernel = new (std::align_val_t(16))float[12];
-
-                memset(r, 0, sizeof(float) * 12);
-                memset(g, 0, sizeof(float) * 12);
-                memset(b, 0, sizeof(float) * 12);
-                memset(kernel, 0, sizeof(float) * 12);
-                std::cout << "ola3" << '\n';
-
                 int cont = 0;
 
                 for(int yf = -1; yf < 2; yf++){
@@ -86,50 +75,30 @@ void aplicaFiltroBilinearThread(float* data, int numChannels, int w, int h, int 
                     int y = (i + yf) % h;
                     int x = (j + xf) % w;
 
-                    vr.data[cont] = pixels[y * w + x].r;
-                    vg.data[cont] = pixels[y * w + x].g;
-                    vb.data[cont] = pixels[y * w + x].b;
+                    r[cont] = pixels[y * w + x].r;
+                    g[cont] = pixels[y * w + x].g;
+                    b[cont] = pixels[y * w + x].b;
 
                     cont ++;
                 }
                 }
-
-                posix_memalign((void**)&r, 16, sizeof(float) * 12);
-                posix_memalign((void**)&g, 16, sizeof(float) * 12);
-                posix_memalign((void**)&b, 16, sizeof(float) * 12);
-                posix_memalign((void**)&kernel, 16, sizeof(float) * 12);
-
-                memcpy(r, &vr, sizeof(float) * 12);
-                memcpy(g, &vg, sizeof(float) * 12);
-                memcpy(b, &vb, sizeof(float) * 12);
-                memcpy(kernel, & bilFilter, sizeof(float) * 12);
+                for(int x = 9; x < 12; x++){
+                    r[cont] = 0;
+                    g[cont] = 0;
+                    b[cont] = 0;
+                }
 
 
                 pixelAux.r = convolucionSSE(r, kernel);
                 pixelAux.g = convolucionSSE(g, kernel);
                 pixelAux.b = convolucionSSE(b, kernel);
-                std::cout << "ola5" << '\n';
-
-                /*for(int yf = -1; yf < 2; yf++){
-                for(int xf = -1; xf < 2; xf++){
-                    int y = (i + yf) % h;
-                    int x = (j + xf) % w;
-
-                    pixelAux.r += pixels[y * w + x].r * bilFilter[(yf + 1) * 3 + (xf + 1)];
-                    pixelAux.g += pixels[y * w + x].g * bilFilter[(yf + 1) * 3 + (xf + 1)];
-                    pixelAux.b += pixels[y * w + x].b * bilFilter[(yf + 1) * 3 + (xf + 1)];
-
-                }
-                }*/
 
                 pixelsOut[((i - ini) * w) + j] = pixelAux;
                 
             }
             }
-                std::cout << "pomelo1" << '\n';
 
         memcpy(((frgbColor_t *)dataOut) + (ini * w), pixelsOut, sizeof(frgbColor_t) * (end - ini) * w);
-                        std::cout << "pomelo2" << '\n';
 
     } else if (numChannels == 4){
             frgbaColor_t *pixels = (frgbaColor_t*)data;
@@ -138,20 +107,34 @@ void aplicaFiltroBilinearThread(float* data, int numChannels, int w, int h, int 
             for (int i = ini; i < end; i++){
             for (int j = 0; j < w; j++){
                 frgbaColor_t pixelAux;
-                pixelAux.r = pixelAux.g = pixelAux.b = pixelAux.a = 0;
+               int cont = 0;
 
                 for(int yf = -1; yf < 2; yf++){
                 for(int xf = -1; xf < 2; xf++){
                     int y = (i + yf) % h;
                     int x = (j + xf) % w;
 
-                    /*pixelAux.r += pixels[y * w + x].r * bilFilter[(yf+1)*3+(xf+1)];
-                    pixelAux.g += pixels[y * w + x].g * bilFilter[(yf+1)*3+(xf+1)];
-                    pixelAux.b += pixels[y * w + x].b * bilFilter[(yf+1)*3+(xf+1)];
-                    pixelAux.a += pixels[y * w + x].a * bilFilter[(yf+1)*3+(xf+1)];*/
+                    r[cont] = pixels[y * w + x].r;
+                    g[cont] = pixels[y * w + x].g;
+                    b[cont] = pixels[y * w + x].b;
+                    a[cont] = pixels[y * w + x].b;
 
+                    cont ++;
                 }
                 }
+                for(int x = 9; x < 12; x++){
+                    r[cont] = 0;
+                    g[cont] = 0;
+                    b[cont] = 0;
+                    a[cont] = 0;
+                }
+
+
+                pixelAux.r = convolucionSSE(r, kernel);
+                pixelAux.g = convolucionSSE(g, kernel);
+                pixelAux.b = convolucionSSE(b, kernel);
+                pixelAux.a = convolucionSSE(a, kernel);
+
 
                 pixelsOut[((i - ini) * w) + j] = pixelAux;
                 
@@ -161,7 +144,7 @@ void aplicaFiltroBilinearThread(float* data, int numChannels, int w, int h, int 
     }
 } 
 
-/* void aplicaFiltroBilinearThread(float* data, int numChannels, int w, int h, int ini, int end, float* &dataOut){
+void aplicaFiltroBilinearThread(float* data, int numChannels, int w, int h, int ini, int end, float* &dataOut){
 
     float bilFilter[9] = {  1.0f/9.0f, 1.0f/9.0f, 1.0f/9.0f, 
                             1.0f/9.0f, 1.0f/9.0f, 1.0f/9.0f, 
@@ -221,7 +204,7 @@ void aplicaFiltroBilinearThread(float* data, int numChannels, int w, int h, int 
             } 
         memcpy(((frgbaColor_t *)dataOut) + (ini * w), pixelsOut, sizeof(frgbaColor_t) * (end - ini) * w);
     }
-} */
+}
 
 void aplicaFiltroBilinear(float* data, int numChannels, int w, int h, float* &dataOut){
     int dataSize= h;
@@ -242,7 +225,7 @@ void aplicaFiltroBilinear(float* data, int numChannels, int w, int h, float* &da
         //std::cout << (i * blockSize) + ((i != NUM_CPUS - 1) ? blockSize : (dataSize - (blockSize * (NUM_CPUS - 1)))) << "\n";
         threads.push_back(
             new std::thread(
-                aplicaFiltroBilinearThread,
+                aplicaFiltroBilinearThreadSSE,
                 std::ref(data),
                 numChannels, 
                 w, 
