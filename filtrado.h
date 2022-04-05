@@ -1,7 +1,5 @@
 #pragma once
 
-#define NUM_CPUS 8
-
 typedef struct frgbaColor_t{
 
     float r;
@@ -28,12 +26,6 @@ typedef struct rgbaByteColor_t{
 
 }rgbaByteColor_t;
 
-typedef struct __attribute__((aligned(16))) mmx_vector{
-    float data[12];
-}mmx_vector;
-
-float convolucionSSE(float* data, float* kernel);
-void aplicaFiltroBilinearThread(float* data, int numChannels, int w, int h, int ini, int end, float* &dataOut);
 void aplicaFiltroBilinear(float* data, int numChannels, int w, int h, float* &dataOut);
 void charToFloat(unsigned char* data, rgbaByteColor_t* palette, int w, int h, float* &dataOut);
 void floatToChar(float* data, int w, int h, int numChannels, unsigned char* &dataOut);
