@@ -8,6 +8,7 @@
 #include <vector>
 #include <mutex>
 
+#define BLOCKDIM 512
 
 
 __global__ void aplicaFiltroBilinearGPU(float* data, float* bilFilter, int w, int h, int numChannels, float* dataOut){
@@ -26,6 +27,68 @@ __global__ void aplicaFiltroBilinearGPU(float* data, float* bilFilter, int w, in
                 int y = (i + yf) % h;
                 int x = (j + xf) % w;
                 dataOut[((i * w + j) * numChannels )+ z] += data[((y * w + x) * numChannels )+ z] * bilFilter[(yf + 1) * 3 + (xf + 1)];
+            }
+        }
+    }
+}
+
+__global__ void aplicaFiltroBilinearGPUShared(float* data, float* bilFilter, int w, int h, int numChannels, float* dataOut){
+    int thId = blockIdx.x * blockDim.x + threadIdx.x;
+    if(thId >= w * h)
+        return;
+
+    int i = thId / w;
+    int j = thId % w;
+    __shared__ float shDataIn[BLOCKDIM * 3 * 3 + 6 * 3];
+
+    if (threadIdx.x == 0) {
+        for(int z = 0; z < numChannels; z++){
+            shDataIn[(BLOCKDIM * numChannels * 0) + (numChannels * 0 * 2) + z] =
+                data[((((i - 1) % h) * w + ((j - 1) % w)) * numChannels) + z];
+
+            shDataIn[(BLOCKDIM * numChannels * 1) + (numChannels * 1 * 2) + z] =
+                data[((((i - 0) % h) * w + ((j - 1) % w)) * numChannels) + z];
+
+            shDataIn[(BLOCKDIM * numChannels * 2) + (numChannels * 2 * 2) + z] = 
+                data[((((i + 1) % h) * w + ((j - 1) % w)) * numChannels) + z];
+        }
+    }else if (threadIdx.x == BLOCKDIM - 1){
+        for(int z = 0; z < numChannels; z++){
+            shDataIn[(BLOCKDIM * numChannels * 1) + (numChannels * 1 * 1) + z] =
+                data[((((i - 1) % h) * w + ((j + 1) % w)) * numChannels) + z];
+
+            shDataIn[(BLOCKDIM * numChannels * 2) + (numChannels * 3 * 1) + z] =
+                data[((((i - 0) % h) * w + ((j + 1) % w)) * numChannels) + z];
+
+            shDataIn[(BLOCKDIM * numChannels * 3) + (numChannels * 5 * 1) + z] = 
+                data[((((i + 1) % h) * w + ((j + 1) % w)) * numChannels) + z];
+        }
+    }
+
+    for(int z = 0; z < numChannels; z++){
+        shDataIn[(BLOCKDIM * numChannels * 0) + (numChannels * 1 * 1) + (numChannels * threadIdx.x) + z] =
+            data[((((i - 1) % h) * w + ((j) % w)) * numChannels) + z];
+
+        shDataIn[(BLOCKDIM * numChannels * 1) + (numChannels * 3 * 1) + (numChannels * threadIdx.x) + z] =
+            data[((((i - 0) % h) * w + ((j) % w)) * numChannels) + z];
+
+        shDataIn[(BLOCKDIM * numChannels * 2) + (numChannels * 5 * 1) + (numChannels * threadIdx.x) + z] = 
+            data[((((i + 1) % h) * w + ((j) % w)) * numChannels) + z];
+    }
+
+    __syncthreads();
+
+
+    for(int z = 0; z < numChannels; z++){
+        dataOut[((i * w + j) * numChannels) + z] = 0.0f;
+        for(int yf = -1; yf < 2; yf++){
+            for(int xf = -1; xf < 2; xf++){
+                int a = 1;
+                int b = threadIdx.x + 1;
+
+                int y = (a + yf);
+                int x = (b + xf);
+                dataOut[((i * w + j) * numChannels) + z] += shDataIn[((y * (BLOCKDIM + 2) + x) * numChannels )+ z] * bilFilter[(yf + 1) * 3 + (xf + 1)];
             }
         }
     }
@@ -59,13 +122,12 @@ void aplicaFiltroBilinear(float* data, int numChannels, int w, int h, float* &da
     cudaMemcpy(d_bilFilter, bilFilter, sizeof(float) * 9, cudaMemcpyHostToDevice);
 
 
-    int blockSize = 512;
-	int numBlocks = dataSize/blockSize;
+	int numBlocks = dataSize/BLOCKDIM;
     numBlocks ++;
 
-    printf("%d %d %d", dataSize, blockSize, numBlocks);
+    printf("%d %d %d", dataSize, BLOCKDIM, numBlocks);
 
-    aplicaFiltroBilinearGPU<<<numBlocks, blockSize >>>(d_data, d_bilFilter, w, h, numChannels, d_dataOut);
+    aplicaFiltroBilinearGPUShared<<<numBlocks, BLOCKDIM >>>(d_data, d_bilFilter, w, h, numChannels, d_dataOut);
 	cudaMemcpy(dataOutTmp, d_dataOut,  dataSize * colorSize , cudaMemcpyDeviceToHost);
 	cudaDeviceSynchronize();
 

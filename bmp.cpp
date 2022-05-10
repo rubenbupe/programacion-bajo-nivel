@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include<cmath>
 
 fileBMP_t* createBMP(int w, int h, int bpp){
     fileBMP_t* bmp = new fileBMP_t;
@@ -48,10 +49,18 @@ fileBMP_t* loadBMP(const char* fileName){
 
     //si paleta
     if(bmp->attributes.bpp <= 8){
-        bmp->palette = new rgbaColor_t[bmp->attributes.numColorsPalette];
-        fread(bmp->palette, sizeof(rgbaColor_t), bmp->attributes.numColorsPalette, f);
+        if(bmp->attributes.numColorsPalette == 0){ // si el numero de colores es 0 -> por defecto 2 ^ bpp
+            bmp->palette = new rgbaColor_t[(int)pow(2, (int) bmp->attributes.bpp)]; 
+            fread(bmp->palette, sizeof(rgbaColor_t), (int)pow(2, (int) bmp->attributes.bpp), f);
+        }else{
+            bmp->palette = new rgbaColor_t[bmp->attributes.numColorsPalette];
+            fread(bmp->palette, sizeof(rgbaColor_t), bmp->attributes.numColorsPalette, f);
+        }
+        
+        
+        std::cout << "paleta: " << bmp->palette[0].r << " " << bmp->palette[0].g << " " << bmp->palette[0].b << std::endl;
     }
-    std::cout << bmp->attributes.numColorsPalette << std::endl;
+    std::cout << "bpp: " << bmp->attributes.bpp << std::endl;
 
         //leer paleta
     //leer datos   

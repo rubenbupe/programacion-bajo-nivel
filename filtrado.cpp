@@ -225,7 +225,7 @@ void aplicaFiltroBilinear(float* data, int numChannels, int w, int h, float* &da
         //std::cout << (i * blockSize) + ((i != NUM_CPUS - 1) ? blockSize : (dataSize - (blockSize * (NUM_CPUS - 1)))) << "\n";
         threads.push_back(
             new std::thread(
-                aplicaFiltroBilinearThreadSSE,
+                aplicaFiltroBilinearThread,
                 std::ref(data),
                 numChannels, 
                 w, 

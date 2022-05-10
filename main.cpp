@@ -20,12 +20,7 @@ int main(int argc, char **argv){
 
     charToFloat(bmp->data, nullptr, bmp->attributes.width, bmp->attributes.height, data);
 
-    clock_t begin = clock();
     aplicaFiltroBilinear(data, 3, bmp->attributes.width, bmp->attributes.height, dataOut);
-    clock_t end = clock();
-    double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
-
-    std::cout << "tiempo: " << time_spent << std::endl;
 
     floatToChar(dataOut, bmp2->attributes.width, bmp2->attributes.height, 3, bmp2->data);
 
