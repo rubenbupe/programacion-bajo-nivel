@@ -19,7 +19,7 @@ typedef struct frgbColor_t{
 
 }frgbColor_t;
 
-typedef struct rgbaByteColor_t{
+typedef struct  __attribute__ ((packed)) rgbaByteColor_t{
 
     unsigned char r;
     unsigned char g;
@@ -35,5 +35,5 @@ typedef struct __attribute__((aligned(16))) mmx_vector{
 float convolucionSSE(float* data, float* kernel);
 void aplicaFiltroBilinearThread(float* data, int numChannels, int w, int h, int ini, int end, float* &dataOut);
 void aplicaFiltroBilinear(float* data, int numChannels, int w, int h, float* &dataOut);
-void charToFloat(unsigned char* data, rgbaByteColor_t* palette, int w, int h, float* &dataOut);
-void floatToChar(float* data, int w, int h, int numChannels, unsigned char* &dataOut);
+void charToFloat(unsigned char* data, rgbaByteColor_t* palette, int w, int h, int numChannels, int bpp, float* &dataOut);
+void floatToChar(float* data, rgbaByteColor_t* palette, int w, int h, int numChannels, int bpp, unsigned char* &dataOut);

@@ -1,4 +1,5 @@
 #pragma once
+#include "filtrado.h"
 
 #define	BI_RGB	0
 #define	BI_RLE8	1
@@ -38,22 +39,14 @@ typedef struct __attribute__ ((packed)) dibHeader_t{
 
 }dibHeader_t;
 
-typedef struct rgbaColor_t{
-
-    unsigned char r;
-    unsigned char g;
-    unsigned char b;
-    unsigned char alpha;
-
-}rgbaColor_t;
-
 
 
 typedef struct fileBMP_t{
 
     bmpHeader_t header;
     dibHeader_t attributes;
-    rgbaColor_t *palette;
+    rgbaByteColor_t *palette;
+    int numChannels;
 
     unsigned char *data;
 

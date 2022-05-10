@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <cmath>
 
 fileBMP_t* createBMP(int w, int h, int bpp){
     fileBMP_t* bmp = new fileBMP_t;
@@ -48,10 +49,20 @@ fileBMP_t* loadBMP(const char* fileName){
 
     //si paleta
     if(bmp->attributes.bpp <= 8){
-        bmp->palette = new rgbaColor_t[bmp->attributes.numColorsPalette];
-        fread(bmp->palette, sizeof(rgbaColor_t), bmp->attributes.numColorsPalette, f);
+        bmp->numChannels = 3;
+        if(bmp->attributes.numColorsPalette != 0){
+            bmp->palette = new rgbaByteColor_t[bmp->attributes.numColorsPalette];
+            fread(bmp->palette, 4, bmp->attributes.numColorsPalette, f);
+        }else{
+            bmp->palette = new rgbaByteColor_t[(int) pow(2, bmp->attributes.bpp)];
+            fread(bmp->palette, 4, (int) pow(2, bmp->attributes.bpp), f);
+        }
+    }else if(bmp->attributes.bpp == 24){
+        bmp->numChannels = 3;
+    }else{
+        bmp->numChannels = 4;
     }
-    std::cout << bmp->attributes.numColorsPalette << std::endl;
+    fseek(f, bmp->header.offsetStart , SEEK_SET);
 
         //leer paleta
     //leer datos   
@@ -86,12 +97,21 @@ int writeBMP(fileBMP_t* bmp, const char* fileName){
     fwrite(&bmp->attributes, sizeof(dibHeader_t), 1, f);
 
     //si paleta
+
+    int sizePaletaBytes = 0;
     if(bmp->attributes.bpp <= 8){
         //write paleta
-        fwrite(bmp->palette, sizeof(rgbaColor_t), bmp->attributes.numColorsPalette, f);
+        if(bmp->attributes.numColorsPalette != 0){
+            sizePaletaBytes = sizeof(rgbaByteColor_t) * bmp->attributes.numColorsPalette;
+            fwrite(bmp->palette, sizeof(rgbaByteColor_t), bmp->attributes.numColorsPalette, f);
+        }else{
+            sizePaletaBytes = sizeof(rgbaByteColor_t) * (int) pow(2, bmp->attributes.bpp);
+            fwrite(bmp->palette, sizeof(rgbaByteColor_t), (int) pow(2, bmp->attributes.bpp), f);
+        }
     }
     //write datos   
     int dataSize = (bmp->attributes.width * bmp->attributes.height * bmp->attributes.bpp) / 8;
+    fwrite(bmp->data, 1, bmp->header.offsetStart - sizeof(bmpHeader_t) - sizeof(dibHeader_t) - sizePaletaBytes, f);
     fwrite(bmp->data, 1, dataSize, f);
     fclose(f);
 

@@ -14,20 +14,23 @@ int main(int argc, char **argv){
     fileBMP_t* bmp2 = createBMP(bmp->attributes.width, bmp->attributes.height, bmp->attributes.bpp);
     bmp2->header = bmp->header;
     bmp2->attributes = bmp->attributes;
+    bmp2->numChannels = bmp->numChannels;
 
     float *data;
     float *dataOut;
 
-    charToFloat(bmp->data, nullptr, bmp->attributes.width, bmp->attributes.height, data);
 
-    clock_t begin = clock();
-    aplicaFiltroBilinear(data, 3, bmp->attributes.width, bmp->attributes.height, dataOut);
-    clock_t end = clock();
-    double time_spent = (double)(end - begin) / CLOCKS_PER_SEC;
+    charToFloat(bmp->data, bmp->palette, bmp->attributes.width, bmp->attributes.height, bmp->numChannels, bmp->attributes.bpp, data);
 
-    std::cout << "tiempo: " << time_spent << std::endl;
+    aplicaFiltroBilinear(data, bmp->numChannels, bmp->attributes.width, bmp->attributes.height, dataOut);
 
-    floatToChar(dataOut, bmp2->attributes.width, bmp2->attributes.height, 3, bmp2->data);
+    floatToChar(dataOut, nullptr, bmp2->attributes.width, bmp2->attributes.height, bmp2->numChannels, bmp->attributes.bpp, bmp2->data);
+    if(bmp->palette != nullptr){
+        bmp2->palette = nullptr;
+        bmp2->attributes.numColorsPalette = 0;
+        bmp2->attributes.bpp = 24;
+        bmp2->numChannels = 3;
+    }
 
     writeBMP(bmp2, "./salida/salida2.bmp");
 

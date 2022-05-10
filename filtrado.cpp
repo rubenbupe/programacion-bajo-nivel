@@ -7,6 +7,7 @@
 #include <thread>
 #include <vector>
 #include <mutex>
+#include <cmath>
 
 float convolucionSSE(float* data, float* kernel){
 
@@ -107,7 +108,7 @@ void aplicaFiltroBilinearThreadSSE(float* data, int numChannels, int w, int h, i
             for (int i = ini; i < end; i++){
             for (int j = 0; j < w; j++){
                 frgbaColor_t pixelAux;
-               int cont = 0;
+                int cont = 0;
 
                 for(int yf = -1; yf < 2; yf++){
                 for(int xf = -1; xf < 2; xf++){
@@ -117,7 +118,7 @@ void aplicaFiltroBilinearThreadSSE(float* data, int numChannels, int w, int h, i
                     r[cont] = pixels[y * w + x].r;
                     g[cont] = pixels[y * w + x].g;
                     b[cont] = pixels[y * w + x].b;
-                    a[cont] = pixels[y * w + x].b;
+                    a[cont] = pixels[y * w + x].a;
 
                     cont ++;
                 }
@@ -190,11 +191,10 @@ void aplicaFiltroBilinearThread(float* data, int numChannels, int w, int h, int 
                     int y = (i + yf) % h;
                     int x = (j + xf) % w;
 
-                    pixelAux.r += pixels[y * w + x].r * bilFilter[(yf+1)*3+(xf+1)];
-                    pixelAux.g += pixels[y * w + x].g * bilFilter[(yf+1)*3+(xf+1)];
-                    pixelAux.b += pixels[y * w + x].b * bilFilter[(yf+1)*3+(xf+1)];
-                    pixelAux.a += pixels[y * w + x].a * bilFilter[(yf+1)*3+(xf+1)];
-
+                    pixelAux.r += pixels[y * w + x].r * bilFilter[(yf+1)*4+(xf+1)];
+                    pixelAux.g += pixels[y * w + x].g * bilFilter[(yf+1)*4+(xf+1)];
+                    pixelAux.b += pixels[y * w + x].b * bilFilter[(yf+1)*4+(xf+1)];
+                    pixelAux.a += pixels[y * w + x].a * bilFilter[(yf+1)*4+(xf+1)];
                 }
                 }
 
@@ -210,22 +210,15 @@ void aplicaFiltroBilinear(float* data, int numChannels, int w, int h, float* &da
     int dataSize= h;
     int blockSize=dataSize/NUM_CPUS;
     std::vector<std::thread*> threads;
-    int colorSize;
 
-    if(numChannels == 3){
-        colorSize = sizeof(frgbColor_t);
-    }else if(numChannels == 4){
-        colorSize = sizeof(frgbaColor_t);
-    }
-
-    float *dataOutTmp = new float[w * h * colorSize / sizeof(float)];
+    float *dataOutTmp = new float[w * h * numChannels];
  
 
     for(int i = 0; i < NUM_CPUS; i++){
         //std::cout << (i * blockSize) + ((i != NUM_CPUS - 1) ? blockSize : (dataSize - (blockSize * (NUM_CPUS - 1)))) << "\n";
         threads.push_back(
             new std::thread(
-                aplicaFiltroBilinearThreadSSE,
+                aplicaFiltroBilinearThread,
                 std::ref(data),
                 numChannels, 
                 w, 
@@ -254,33 +247,58 @@ void aplicaFiltroBilinear(float* data, int numChannels, int w, int h, float* &da
 }
 
 
+void charToFloat(unsigned char* data, rgbaByteColor_t* palette, int w, int h, int numChannels, int bpp , float* &dataOut){
 
-void charToFloat(unsigned char* data, rgbaByteColor_t* palette, int w, int h, float* &dataOut){
-
-    if(palette == nullptr){
-        dataOut = new float[w*h*3];
-        for(int i = 0; i < w*h*3; i++){
+    if(palette == nullptr){ // 24bpp, 32bpp
+        dataOut = new float[w*h*numChannels];
+        for(int i = 0; i < w*h*numChannels; i++){
             dataOut[i] = ((float) data[i])/256.0f;
         }
-    } else {
-        dataOut = new float[w*h*4];
+    } else { // 1bpp, 2bpp, 4bpp, 8bpp
+        dataOut = new float[w*h*3];
         for(int i = 0; i < w*h; i++){
-            dataOut[i*4  ] = ((float) palette[data[i]].r)/256.0f;
-            dataOut[i*4+1] = ((float) palette[data[i]].g)/256.0f;
-            dataOut[i*4+2] = ((float) palette[data[i]].b)/256.0f;
-            dataOut[i*4+3] = ((float) palette[data[i]].a)/256.0f;
+            int nSteps = (8 / bpp);
+            int x = i / nSteps; // byte
+            int y = bpp * (nSteps - (i % nSteps) - 1); // bit
+
+
+
+            int idx = (data[x] >> y) % ((int) pow(2, bpp));
+
+
+
+            dataOut[i*3  ] = ((float) palette[idx].r)/256.0f;
+            dataOut[i*3+1] = ((float) palette[idx].g)/256.0f;
+            dataOut[i*3+2] = ((float) palette[idx].b)/256.0f;
         }
     }
 }
 
 
+// 00001101  00001111    11111111
+//   15         15            255
 
-void floatToChar(float* data, int w, int h, int numChannels, unsigned char* &dataOut){
-    dataOut = new unsigned char[w*h*3];
+// 11010000  00001111    11011111
+//   208        15            223
+
+void floatToChar(float* data, rgbaByteColor_t* palette, int w, int h, int numChannels, int bpp, unsigned char* &dataOut){
     int dataOutCount = 0;
-    for(int i = 0; i < w*h*numChannels; i+=numChannels){
-        dataOut[dataOutCount++] = (unsigned char)(256.0f * data[i]);
-        dataOut[dataOutCount++] = (unsigned char)(256.0f * data[i+1]);
-        dataOut[dataOutCount++] = (unsigned char)(256.0f * data[i+2]);
+
+
+    if(palette != nullptr){
+
+        dataOut = new unsigned char[w*h*3];
+        //for(int i = 0; i < w*h*4; i+=2){ // Se transforma a 24bpp
+        for(int i = 0; i < w*h*3; i++){
+            //unsigned char p1 = (unsigned char)((int)((16.0f * data[i]))) << 4;
+            //unsigned char p2 = (unsigned char)((int)((16.0f * data[i + 1])));
+            //std::cout << i << ' ';
+            dataOut[dataOutCount++] = (unsigned char)(256.0f * data[i]);
+        }
+    }else{
+        dataOut = new unsigned char[w*h*numChannels];
+        for(int i = 0; i < w*h*numChannels; i+=1){
+            dataOut[dataOutCount++] = (unsigned char)(256.0f * data[i]);
+        }
     }
 }
