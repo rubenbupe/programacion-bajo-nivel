@@ -1,1 +1,1 @@
-Programación de bajo nivel P1
+Prácticas de Programación de bajo nivel
